@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow border-primary">
+            <div class="card-body">
+                <h3 class="text-center text-primary mb-4">Iniciar Sesión</h3>
+                
+                <!-- El ID "login-form" es vital para que JS lo detecte -->
+                <form id="login-form">
+                    {% csrf_token %}
+                    <input type="text" id="username" class="form-control mb-3" placeholder="Nombre de usuario" required>
+                    <input type="password" id="password" class="form-control mb-3" placeholder="Contraseña" required>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold">Entrar</button>
+                </form>
+                
+                <div class="text-center mt-4">
+                    <p class="mb-0 text-muted">¿No tienes cuenta?</p>
+                    <a href="/registro/" class="text-decoration-none fw-bold">Regístrate aquí</a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        // Esta línea es la magia: evita que la url cambie a /login/?csrf...
+        e.preventDefault(); 
+        
+        const user = document.getElementById('username').value;
+        const pass = document.getElementById('password').value;
+
+        try {
+            const res = await fetch('/api/token/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: user, password: pass })
+            });
+            
+            if(res.ok){
+                const data = await res.json();
+                localStorage.setItem('access_token', data.access); // Guardamos el pase VIP
+                window.location.href = '/'; // Redirigimos al catálogo
+            } else {
+                alert('Credenciales incorrectas. Verifica tu usuario y contraseña.');
+            }
+        } catch (error) {
+            console.error('Error de conexión:', error);
+        }
+    });
+</script>
+{% endblock %}

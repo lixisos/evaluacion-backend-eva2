@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow border-success">
+            <div class="card-body">
+                <h3 class="text-center text-success mb-4">Crear Cuenta Cliente</h3>
+                <form id="registro-form">
+                    {% csrf_token %}
+                    <input type="text" id="reg-username" class="form-control mb-3" placeholder="Nombre de usuario" required>
+                    <input type="password" id="reg-password" class="form-control mb-3" placeholder="Contraseña" required>
+                    <button type="submit" class="btn btn-success w-100 fw-bold">Registrarse</button>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="/login/" class="text-decoration-none text-muted small">Volver al inicio de sesión</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('registro-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('reg-username').value;
+        const password = document.getElementById('reg-password').value;
+
+        try {
+            const res = await fetch('/api/registro/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username, password })
+            });
+            if(res.ok){
+                alert("Cuenta creada con éxito. Ahora puedes iniciar sesión.");
+                window.location.href = '/login/'; 
+            } else {
+                const errorData = await res.json();
+                alert("Error: " + JSON.stringify(errorData));
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    });
+</script>
+{% endblock %}

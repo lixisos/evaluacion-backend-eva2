@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,6 +38,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'django_filters',
+    'app',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -54,7 +60,7 @@ ROOT_URLCONF = 'core.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -74,8 +80,12 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'arriendos_db', # Nombre de la base de datos
+        'USER': 'postgres', # Usuario de la base de datos
+        'PASSWORD' : '23038165', # Contraseña de la base de datos
+        'HOST': 'localhost', # Host de la base de datos
+        'PORT': '5432', # Puerto de la base de datos
     }
 }
 
@@ -120,3 +130,31 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+#CONFIGURACIÓN DE DJANGO REST FRAMEWORK Y FLITROS
+REST_FRAMEWORK = {
+    #Define JWT como el método de autenticación predeterminado
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    # Habilita el filtrado de consultas en las vistas de DRF
+    'DEFAULT_FILTER_BACKENDS': (
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ),
+}
+
+# CONFIGURACIÓN DE LOS TOKENS JWT
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Tiempo de vida del token de acceso
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # Tiempo de vida
+    'AUTH_HEADER_TYPES': ('Bearer',),  # Tipo de encabezado de autorización
+}
+
+REST_FRAMEWORK['DEFAULT_SCHEMA_CLASS'] = 'drf_spectacular.openapi.AutoSchema'
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'API Arriendo Maquinaria - Proyecto 6',
+    'DESCRIPTION': 'Documentación del sistema de arriendos',
+    'VERSION': '1.0.0',
+}
+

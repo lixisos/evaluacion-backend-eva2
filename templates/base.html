@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arriendo de Maquinaria</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="d-flex flex-column min-vh-100 bg-light">
+
+    <!-- BARRA DE NAVEGACIÓN DINÁMICA -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">Maquinarias PRO</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-center" id="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/">Catálogo</a></li>
+                    <li class="nav-item"><a class="nav-link text-warning" href="/api/docs/" target="_blank">Docs API</a></li>
+                    <!-- Los botones de Carro, Admin y Usuario se inyectarán aquí con JavaScript -->
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- CONTENIDO DINÁMICO -->
+    <main class="container my-5 flex-grow-1">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- FOOTER OBLIGATORIO -->
+    <footer class="bg-dark text-white text-center py-3 mt-auto">
+        <div class="container">
+            <p class="mb-0 fw-bold">Desarrollado por: [Bastian Fernandez Neira]</p>
+            <p class="mb-0">Sección: [AP-N4-C2 E-F/D] | Año: 2026</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function getCSRFToken() {
+            const el = document.querySelector('[name=csrfmiddlewaretoken]');
+            return el ? el.value : '';
+        }
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                alert("Debes iniciar sesión para realizar esta acción.");
+                window.location.href = '/login/'; 
+            }
+            return {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+                'Authorization': 'Bearer ' + token
+            };
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem('access_token');
+            window.location.href = '/';
+        }
+
+        // Función para decodificar el Payload del JWT sin usar librerías externas
+        function parseJwt(token) {
+            try {
+                return JSON.parse(atob(token.split('.')[1]));
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Renderizado dinámico del menú según el estado de la sesión y el Rol
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('access_token');
+            const navMenu = document.getElementById('nav-menu');
+
+            if (token) {
+                const payload = parseJwt(token);
+                
+               // Si es Admin, mostramos el botón a su Dashboard. Si es Cliente, el Carro.
+                if (payload.rol === 'Ejecutivo de Arriendos') {
+                    navMenu.innerHTML += `<li class="nav-item"><a class="nav-link text-success fw-bold ms-2 me-3" href="/dashboard/">📊 Mi Dashboard</a></li>`;
+                } else {
+                    navMenu.innerHTML += `<li class="nav-item"><a class="nav-link fw-bold text-info" href="/carro/">🛒 Mi Carro</a></li>`;
+                }
+
+                // Menú desplegable con el nombre del usuario
+                navMenu.innerHTML += `
+                    <li class="nav-item dropdown ms-2">
+                        <a class="nav-link dropdown-toggle text-white fw-bold" href="#" data-bs-toggle="dropdown">
+                            👤 ${payload.username}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li><span class="dropdown-item-text text-muted small border-bottom pb-2 mb-1">Rol: ${payload.rol}</span></li>
+                            <li><a class="dropdown-item text-danger fw-bold" href="#" onclick="cerrarSesion()">Cerrar Sesión</a></li>
+                        </ul>
+                    </li>
+                `;
+            } else {
+                // Vista para usuarios no registrados
+                navMenu.innerHTML += `<li class="nav-item ms-3"><a class="btn btn-primary btn-sm fw-bold px-3" href="/login/">Iniciar Sesión</a></li>`;
+            }
+        });
+    </script>
+</body>
+</html>

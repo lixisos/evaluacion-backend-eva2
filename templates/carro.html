@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="fw-bold mb-4">Tu Carro de Arriendo</h2>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8" id="carro-items-container">
+        <!-- Ítems del carro -->
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 bg-light">
+            <div class="card-body">
+                <h4 class="fw-bold border-bottom pb-3">Resumen del Contrato</h4>
+                <div class="d-flex justify-content-between mt-3 mb-4">
+                    <h5 class="fw-bold">Total Estimado:</h5>
+                    <h5 class="fw-bold text-primary" id="total-carro">$0</h5>
+                </div>
+                <button class="btn btn-success w-100 fw-bold btn-lg" onclick="procesarCheckout()">
+                    Confirmar y Pagar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    
+    data.items.forEach(item => {
+        total += parseFloat(item.subtotal);
+        contenedor.innerHTML += `
+            <div class="card mb-3 shadow-sm border-0 position-relative">
+                <button class="btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="eliminarDelCarro(${item.id})">❌</button>
+                <div class="row g-0">
+                    <div class="col-md-3">
+                        <img src="${item.maquinaria_detalle.imagen_url}" class="img-fluid rounded-start h-100" style="object-fit: cover;" alt="...">
+                    </div>
+                    <div class="col-md-9">
+                        <div class="card-body">
+                            <h5 class="fw-bold">${item.maquinaria_detalle.nombre}</h5>
+                            <p class="mb-1 text-muted">Período: ${item.fecha_inicio} al ${item.fecha_fin} (${item.dias_arriendo} días)</p>
+                            <p class="mb-1 text-muted">Cantidad solicitada: <strong>${item.cantidad} unidad(es)</strong></p>
+                            <h5 class="text-primary fw-bold mt-2">Subtotal: $${item.subtotal.toLocaleString('es-CL')}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+
+    async function eliminarDelCarro(itemId) {
+        if(confirm("¿Eliminar ítem?")) {
+            await fetch(`/api/carro-items/${itemId}/`, { method: 'DELETE', headers: getAuthHeaders() });
+            cargarCarro(); // Recarga la vista completa
+        }
+    }
+
+
+    async function procesarCheckout() {
+        const res = await fetch('/api/contratos/checkout/', {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        if(res.ok) {
+            alert("¡Contrato generado con éxito! El stock ha sido descontado (Estado: PENDIENTE/PAGADO).");
+            window.location.href = '/';
+        } else {
+            const errorData = await res.json();
+            alert("Error al procesar: " + (errorData.error || "Revisa el stock disponible."));
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarCarro);
+</script>
+{% endblock %}

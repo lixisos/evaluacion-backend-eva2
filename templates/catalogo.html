@@ -1,0 +1,516 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- BARRA DE BÚSQUEDA Y CATEGORÍAS -->
+<div class="bg-primary text-white p-4 rounded mb-4 shadow-sm text-center">
+    <div class="input-group w-75 mx-auto mb-3">
+        <input type="text" id="buscadorInput" class="form-control form-control-lg" placeholder="¿Qué maquinaria necesitas arrendar hoy?">
+        <button class="btn btn-warning fw-bold px-4" onclick="ejecutarBusqueda()">Buscar 🔍</button>
+    </div>
+    
+    <div class="d-flex justify-content-center gap-4 flex-wrap mt-3">
+        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('Excavadoras')">
+            <span class="fs-2">🚜</span><br><small>Excavadoras</small>
+        </div>
+        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('Grúas')">
+            <span class="fs-2">🏗️</span><br><small>Grúas</small>
+        </div>
+        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('Generadores')">
+            <span class="fs-2">⚡</span><br><small>Generadores</small>
+        </div>
+        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('')">
+            <span class="fs-2">📋</span><br><small>Ver Todo</small>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- CATÁLOGO PRINCIPAL -->
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="fw-bold" id="titulo-seccion">Maquinaria Disponible</h3>
+            <div id="btn-add-admin"></div>
+        </div>
+        <div class="row g-3" id="maquinarias-list"></div>
+    </div>
+
+    <!-- BARRA LATERAL (CARRITO / RESUMEN) -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 sticky-top" style="top: 20px;">
+            <div class="card-header bg-light fw-bold" id="sidebar-title">
+                Cargando...
+            </div>
+            <div class="card-body" id="sidebar-content"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODALES DEL SISTEMA -->
+<!-- ========================================== -->
+
+<!-- 1. MODAL DE DETALLE -->
+<div class="modal fade" id="detalleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="modalDetalleNombre">Detalle de Maquinaria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <img id="modalDetalleImagen" src="" class="img-fluid rounded" alt="Imagen">
+                    </div>
+                    <div class="col-md-6">
+                        <h4 class="text-primary fw-bold" id="modalDetallePrecio"></h4>
+                        <p id="modalDetalleDescripcion" class="text-muted mt-3"></p>
+                        <p><strong>Stock disponible:</strong> <span id="modalDetalleStock"></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. MODAL DE ARRIENDO (CLIENTES) -->
+<div class="modal fade" id="arriendoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="modalNombreMaquina">Arrendar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modalIdMaquina">
+                <input type="hidden" id="modalStockMaximo">
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Fecha de Inicio</label>
+                    <input type="date" class="form-control" id="fechaInicioRenta">
+                    <small class="text-muted">No puede ser anterior a hoy.</small>
+                </div>
+                
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label fw-bold">Días de Arriendo</label>
+                        <input type="number" class="form-control" id="diasRenta" value="1" min="1">
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label fw-bold">Cant. Máquinas</label>
+                        <input type="number" class="form-control" id="cantidadRenta" value="1" min="1">
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2" id="resumenFechas">
+                    Terminará el: <strong id="textoFechaFin">...</strong>
+                </div>
+
+                <button class="btn btn-warning w-100 fw-bold" onclick="confirmarArriendo()">Confirmar al Carrito</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 3. NUEVO: MODAL DE GESTIÓN (ADMIN/GERENTE CRUD) -->
+<div class="modal fade" id="gestionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold" id="modalGestionTitulo">Añadir Maquinaria</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <!-- Formulario que interceptamos con JS -->
+            <form id="formGestion" onsubmit="guardarMaquinaria(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="formGestionId">
+                    
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Nombre del Equipo</label>
+                        <input type="text" class="form-control" id="formNombre" required>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Categoría</label>
+                        <!-- Opciones predefinidas o escritura libre -->
+                        <input type="text" class="form-control" id="formCategoria" placeholder="Ej: Excavadoras, Grúas, etc." required>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6 mb-2">
+                            <label class="form-label fw-bold">Tarifa Diaria ($)</label>
+                            <input type="number" class="form-control" id="formTarifa" required min="0">
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="form-label fw-bold">Garantía ($)</label>
+                            <input type="number" class="form-control" id="formGarantia" required min="0">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6 mb-2">
+                            <label class="form-label fw-bold">Stock Físico</label>
+                            <input type="number" class="form-control" id="formStock" required min="0">
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="form-label fw-bold">URL de la Imagen</label>
+                            <input type="url" class="form-control" id="formImagen" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Descripción / Detalles Técnicos</label>
+                        <textarea class="form-control" id="formDescripcion" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success w-100 fw-bold">💾 Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- SCRIPT PRINCIPAL -->
+<!-- ========================================== -->
+<script>
+    let rolUsuario = 'Visitante';
+    let arriendoModal, detalleModal, gestionModal;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Inicializar Modales
+        arriendoModal = new bootstrap.Modal(document.getElementById('arriendoModal'));
+        detalleModal = new bootstrap.Modal(document.getElementById('detalleModal'));
+        gestionModal = new bootstrap.Modal(document.getElementById('gestionModal'));
+        
+        document.getElementById('fechaInicioRenta').addEventListener('change', actualizarFechaFin);
+        document.getElementById('diasRenta').addEventListener('input', actualizarFechaFin);
+
+        // Identificar usuario
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            rolUsuario = payload.rol;
+            if (rolUsuario !== 'Ejecutivo de Arriendos') {
+                const docsLink = document.getElementById('link-docs-api');
+                if (docsLink) docsLink.style.display = 'none';
+            }
+        }
+        
+        configurarInterfaz();
+        cargarCatalogo();
+    });
+
+    function configurarInterfaz() {
+        if (rolUsuario === 'Ejecutivo de Arriendos') {
+            document.getElementById('titulo-seccion').innerText = "Inventario General de Maquinaria";
+            // BOTÓN FRONTEND PARA CREAR
+            document.getElementById('btn-add-admin').innerHTML = `<button class="btn btn-primary btn-sm fw-bold" onclick="abrirModalCrear()">+ Añadir Nueva Maquinaria</button>`;
+            document.getElementById('sidebar-title').innerText = "Resumen de Inventario";
+            cargarResumenAdmin();
+        } else {
+            document.getElementById('titulo-seccion').innerText = "Maquinaria Disponible";
+            document.getElementById('sidebar-title').innerText = "Mi Carrito de Arriendo";
+            if (rolUsuario === 'Empresa Constructora') cargarCarritoSidebar();
+            else document.getElementById('sidebar-content').innerHTML = `<p class="text-muted text-center mt-3">Inicia sesión para usar el carrito.</p>`;
+        }
+    }
+
+    /* ---------------------------------------------------
+       LÓGICA DEL CATÁLOGO Y BÚSQUEDA
+    --------------------------------------------------- */
+    async function cargarCatalogo(categoria = '', busqueda = '') {
+        try {
+            const res = await fetch('/api/maquinarias/');
+            let data = await res.json();
+            
+            if (categoria) data = data.filter(maq => maq.categoria === categoria);
+            if (busqueda) {
+                const query = busqueda.toLowerCase();
+                data = data.filter(maq => 
+                    maq.nombre.toLowerCase().includes(query) || 
+                    maq.categoria.toLowerCase().includes(query) ||
+                    (maq.descripcion && maq.descripcion.toLowerCase().includes(query))
+                );
+            }
+
+            const contenedor = document.getElementById('maquinarias-list');
+            contenedor.innerHTML = '';
+
+            if (data.length === 0) {
+                contenedor.innerHTML = `<div class="col-12 text-center mt-5"><h4 class="text-muted">No encontramos maquinaria que coincida.</h4></div>`;
+                return;
+            }
+
+            data.forEach(maq => {
+                const descSegura = maq.descripcion ? maq.descripcion.replace(/"/g, '&quot;').replace(/\n/g, '<br>') : '';
+                const nomSeguro = maq.nombre.replace(/'/g, "\\'"); 
+                
+                let botones = '';
+                if (rolUsuario === 'Ejecutivo de Arriendos') {
+                    // BOTONES FRONTEND CRUD PARA EL GERENTE
+                    botones = `
+                        <div class="d-flex gap-1 mt-2">
+                            <button class="btn btn-warning btn-sm w-50 text-white fw-bold" onclick="abrirModalEditar(${maq.id})">✏️ Editar</button>
+                            <button class="btn btn-danger btn-sm w-50 fw-bold" onclick="eliminarMaquinaria(${maq.id})">🗑️ Eliminar</button>
+                        </div>
+                    `;
+                } else {
+                    botones = `
+                        <div class="d-flex gap-1 mt-2">
+                            <button class="btn btn-outline-secondary btn-sm w-50" onclick="mostrarDetalle('${nomSeguro}', '${descSegura}', '${maq.imagen_url}', ${maq.tarifa_diaria}, ${maq.stock_disponible})">Detalles</button>
+                            <button class="btn btn-warning btn-sm w-50 fw-bold text-white" onclick="abrirModalArriendo(${maq.id}, '${nomSeguro}', ${maq.stock_disponible})" ${maq.stock_disponible < 1 ? 'disabled' : ''}>Arrendar</button>
+                        </div>
+                    `;
+                }
+
+                contenedor.innerHTML += `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 shadow-sm border-0">
+                            <span class="position-absolute top-0 end-0 badge ${maq.stock_disponible > 0 ? 'bg-success' : 'bg-danger'} m-2">Stock: ${maq.stock_disponible}</span>
+                            <img src="${maq.imagen_url || 'https://via.placeholder.com/300x200'}" class="card-img-top" style="height: 160px; object-fit: cover;">
+                            <div class="card-body d-flex flex-column">
+                                <span class="text-muted small text-uppercase">${maq.categoria}</span>
+                                <h6 class="fw-bold mt-1">${maq.nombre}</h6>
+                                <h5 class="text-primary mt-auto border-top pt-2 mt-2">Desde $${parseFloat(maq.tarifa_diaria).toLocaleString('es-CL')}<small>/día</small></h5>
+                                ${botones}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        } catch (error) {
+            console.error("Error cargando catálogo:", error);
+        }
+    }
+
+    function ejecutarBusqueda() {
+        cargarCatalogo('', document.getElementById('buscadorInput').value); 
+    }
+
+    function mostrarDetalle(nombre, descripcion, imagen, precio, stock) {
+        document.getElementById('modalDetalleNombre').innerText = nombre;
+        document.getElementById('modalDetalleImagen').src = imagen || 'https://via.placeholder.com/300x200';
+        document.getElementById('modalDetallePrecio').innerText = `$${parseFloat(precio).toLocaleString('es-CL')} / día`;
+        document.getElementById('modalDetalleDescripcion').innerHTML = descripcion;
+        document.getElementById('modalDetalleStock').innerText = stock;
+        detalleModal.show();
+    }
+
+    /* ---------------------------------------------------
+       NUEVO: LÓGICA CRUD PARA EL GERENTE (FRONTEND)
+    --------------------------------------------------- */
+    function abrirModalCrear() {
+        document.getElementById('formGestion').reset();
+        document.getElementById('formGestionId').value = '';
+        document.getElementById('modalGestionTitulo').innerText = 'Añadir Nueva Maquinaria';
+        gestionModal.show();
+    }
+
+    async function abrirModalEditar(id) {
+        // Traemos los datos de la máquina específica desde la API
+        const res = await fetch(`/api/maquinarias/${id}/`);
+        if(res.ok) {
+            const maq = await res.json();
+            document.getElementById('formGestionId').value = maq.id;
+            document.getElementById('formNombre').value = maq.nombre;
+            document.getElementById('formCategoria').value = maq.categoria;
+            document.getElementById('formTarifa').value = maq.tarifa_diaria;
+            document.getElementById('formGarantia').value = maq.garantia_fija;
+            document.getElementById('formStock').value = maq.stock_disponible;
+            document.getElementById('formImagen').value = maq.imagen_url || '';
+            document.getElementById('formDescripcion').value = maq.descripcion || '';
+            
+            document.getElementById('modalGestionTitulo').innerText = 'Editar Equipo';
+            gestionModal.show();
+        }
+    }
+
+    async function guardarMaquinaria(e) {
+        e.preventDefault(); // Evitamos recargar la página
+        const id = document.getElementById('formGestionId').value;
+        const method = id ? 'PUT' : 'POST'; // Si hay ID es edición, sino es creación
+        const url = id ? `/api/maquinarias/${id}/` : '/api/maquinarias/';
+        
+        const payload = {
+            nombre: document.getElementById('formNombre').value,
+            categoria: document.getElementById('formCategoria').value,
+            tarifa_diaria: document.getElementById('formTarifa').value,
+            garantia_fija: document.getElementById('formGarantia').value,
+            stock_disponible: document.getElementById('formStock').value,
+            imagen_url: document.getElementById('formImagen').value,
+            descripcion: document.getElementById('formDescripcion').value
+        };
+
+        const res = await fetch(url, {
+            method: method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            gestionModal.hide();
+            cargarCatalogo(); // Recargamos el catálogo visual
+            cargarResumenAdmin(); // Actualizamos los contadores
+            alert(id ? 'Equipo actualizado con éxito.' : 'Equipo registrado con éxito.');
+        } else {
+            alert('Error al guardar la maquinaria. Verifica los datos.');
+        }
+    }
+
+    async function eliminarMaquinaria(id) {
+        if (!confirm('¿Estás COMPLETAMENTE SEGURO de eliminar este equipo del inventario?')) return;
+        
+        const res = await fetch(`/api/maquinarias/${id}/`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        
+        if (res.ok) {
+            cargarCatalogo();
+            cargarResumenAdmin();
+        } else {
+            alert('Error al eliminar. Puede que tenga contratos asociados.');
+        }
+    }
+
+    /* ---------------------------------------------------
+       LÓGICA DE CLIENTES: ARRIENDO Y CHECKOUT
+    --------------------------------------------------- */
+    function abrirModalArriendo(id, nombre, stock) {
+        document.getElementById('modalIdMaquina').value = id;
+        document.getElementById('modalStockMaximo').value = stock;
+        document.getElementById('modalNombreMaquina').innerText = `Arrendar: ${nombre}`;
+        
+        const hoy = new Date().toISOString().split('T')[0];
+        document.getElementById('fechaInicioRenta').min = hoy;
+        document.getElementById('fechaInicioRenta').value = hoy;
+        document.getElementById('diasRenta').value = 1;
+        document.getElementById('cantidadRenta').value = 1;
+        
+        actualizarFechaFin();
+        arriendoModal.show();
+    }
+
+    function actualizarFechaFin() {
+        const inicioStr = document.getElementById('fechaInicioRenta').value;
+        const dias = parseInt(document.getElementById('diasRenta').value) || 1;
+        if (inicioStr) {
+            const fecha = new Date(inicioStr + 'T00:00:00');
+            fecha.setDate(fecha.getDate() + dias);
+            document.getElementById('textoFechaFin').innerText = fecha.toISOString().split('T')[0];
+        }
+    }
+
+    async function confirmarArriendo() {
+        const id = document.getElementById('modalIdMaquina').value;
+        const inicio = document.getElementById('fechaInicioRenta').value;
+        const dias = parseInt(document.getElementById('diasRenta').value);
+        const cantidad = parseInt(document.getElementById('cantidadRenta').value);
+        const stockMaximo = parseInt(document.getElementById('modalStockMaximo').value);
+
+        if (!inicio) return alert("Ingresa la fecha de inicio.");
+        if (cantidad > stockMaximo) return alert(`Solo hay ${stockMaximo} unidades disponibles.`);
+
+        const fecha = new Date(inicio + 'T00:00:00');
+        fecha.setDate(fecha.getDate() + dias);
+        const fin = fecha.toISOString().split('T')[0];
+
+        const res = await fetch('/api/carro-items/', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ maquinaria: id, fecha_inicio: inicio, fecha_fin: fin, cantidad: cantidad })
+        });
+
+        if (res.ok) {
+            arriendoModal.hide();
+            cargarCarritoSidebar(); 
+        } else {
+            alert("Error al agregar al carrito.");
+        }
+    }
+
+    async function cargarCarritoSidebar() {
+        const res = await fetch('/api/mi-carro/', { headers: getAuthHeaders() });
+        const sidebar = document.getElementById('sidebar-content');
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (!data.items || data.items.length === 0) {
+            sidebar.innerHTML = `<div class="text-center text-muted my-4">Tu carrito está vacío</div>`;
+            return;
+        }
+
+        let html = '<ul class="list-group list-group-flush mb-3">';
+        let total = 0;
+        data.items.forEach(item => {
+            total += parseFloat(item.subtotal);
+            html += `
+                <li class="list-group-item px-0 py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-bold d-block text-truncate" style="max-width: 150px;">${item.maquinaria_detalle.nombre}</span>
+                            <small class="text-muted">${item.cantidad} unidad(es) x ${item.dias_arriendo} día(s)</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="text-primary d-block fw-bold">$${parseFloat(item.subtotal).toLocaleString('es-CL')}</span>
+                            <button class="btn btn-sm text-danger p-0 mt-1" onclick="eliminarItemCarro(${item.id})">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                </li>
+            `;
+        });
+        html += `</ul>
+            <div class="d-flex justify-content-between fw-bold mb-3 fs-5">
+                <span>Total Estimado:</span>
+                <span class="text-success">$${total.toLocaleString('es-CL')}</span>
+            </div>
+            <button class="btn btn-success w-100 fw-bold py-2" onclick="procesarPago()">Pagar Ahora</button>`;
+        
+        sidebar.innerHTML = html;
+        document.getElementById('sidebar-title').innerText = `Mi Carrito (${data.items.length})`;
+    }
+
+    async function eliminarItemCarro(itemId) {
+        if (!confirm("¿Seguro que deseas quitar esto del carrito?")) return;
+        const res = await fetch(`/api/carro-items/${itemId}/`, { method: 'DELETE', headers: getAuthHeaders() });
+        if (res.ok) cargarCarritoSidebar();
+    }
+
+    async function procesarPago() {
+        const res = await fetch('/api/contratos/checkout/', { method: 'POST', headers: getAuthHeaders() });
+        if(res.ok) {
+            alert("¡Pago exitoso! Se ha generado tu contrato.");
+            cargarCarritoSidebar();
+            cargarCatalogo(); 
+        } else {
+            const errorData = await res.json();
+            alert("Error procesando el pago: " + (errorData.error || "Verifica el stock."));
+        }
+    }
+
+    /* ---------------------------------------------------
+       LÓGICA DEL PANEL ADMIN (RESUMEN)
+    --------------------------------------------------- */
+    async function cargarResumenAdmin() {
+        const sidebar = document.getElementById('sidebar-content');
+        const res = await fetch('/api/maquinarias/');
+        const maquinas = await res.json();
+        
+        const total = maquinas.length;
+        const disponibles = maquinas.filter(m => m.stock_disponible > 0).length;
+        
+        sidebar.innerHTML = `
+            <div class="alert alert-secondary">
+                <p class="mb-1"><strong>Total Máquinas Registradas:</strong> ${total}</p>
+                <p class="mb-1"><strong>Unidades Disponibles:</strong> ${disponibles}</p>
+                <p class="mb-0 text-danger"><strong>En Terreno / Agotadas:</strong> ${total - disponibles}</p>
+            </div>
+            <h6 class="fw-bold mt-4">Panel de Accesos Directos</h6>
+            <a href="/admin/app/contrato/" target="_blank" class="btn btn-info text-white w-100 mt-2 fw-bold">Ver Contratos y Ventas</a>
+            <a href="/admin/" target="_blank" class="btn btn-dark w-100 mt-2">Ir al Panel Avanzado Django</a>
+        `;
+    }
+</script>
+{% endblock %}

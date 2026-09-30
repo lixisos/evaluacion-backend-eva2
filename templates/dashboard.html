@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold text-dark">Dashboard Gerencial</h2>
+    <div>
+        <a href="/admin/app/maquinaria/" target="_blank" class="btn btn-primary fw-bold">Gestionar Inventario (CRUD)</a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-success text-white shadow border-0">
+            <div class="card-body">
+                <h5 class="card-title">Ventas del Mes</h5>
+                <h2 class="fw-bold" id="metric-ventas">$0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-info text-white shadow border-0">
+            <div class="card-body">
+                <h5 class="card-title">Contratos Activos</h5>
+                <h2 class="fw-bold" id="metric-contratos">0</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-dark text-white fw-bold">
+        Últimos Contratos (Historial)
+    </div>
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Cliente</th>
+                    <th>Estado</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-contratos">
+                <!-- Se llena con JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Obtenemos los contratos de la API
+        const res = await fetch('/api/contratos/', { headers: getAuthHeaders() });
+        if(res.ok) {
+            const contratos = await res.json();
+            let totalVentas = 0;
+            let contratosActivos = 0;
+            const tbody = document.getElementById('tabla-contratos');
+
+            contratos.forEach(c => {
+                // Sumamos métricas
+                if (c.estado === 'PAGADO' || c.estado === 'COMPLETADO') {
+                    totalVentas += parseFloat(c.total_pagar);
+                }
+                if (c.estado !== 'CANCELADO') contratosActivos++;
+
+                // Llenamos tabla
+                tbody.innerHTML += `
+                    <tr>
+                        <td>#${c.id}</td>
+                        <td>Usuario ${c.usuario}</td>
+                        <td><span class="badge bg-secondary">${c.estado}</span></td>
+                        <td>$${parseFloat(c.total_pagar).toLocaleString('es-CL')}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('metric-ventas').innerText = '$' + totalVentas.toLocaleString('es-CL');
+            document.getElementById('metric-contratos').innerText = contratosActivos;
+        }
+    });
+</script>
+{% endblock %}
