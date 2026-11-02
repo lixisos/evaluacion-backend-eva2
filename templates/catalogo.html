@@ -1,71 +1,335 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuildCorp - Control de Herramientas y Activos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .navbar-brand { font-weight: 800; letter-spacing: 0.5px; }
+        .signature-pad {
+            border: 2px dashed #495057;
+            background-color: #ffffff;
+            border-radius: 6px;
+            cursor: crosshair;
+        }
+        footer {
+            background-color: #1e2125;
+            color: #adb5bd;
+            padding: 18px 0;
+            margin-top: 60px;
+        }
+        .card-header-custom {
+            background-color: #212529;
+            color: #ffc107;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
 
-{% block content %}
-<!-- BARRA DE BÚSQUEDA Y CATEGORÍAS -->
-<div class="bg-primary text-white p-4 rounded mb-4 shadow-sm text-center">
-    <div class="input-group w-75 mx-auto mb-3">
-        <input type="text" id="buscadorInput" class="form-control form-control-lg" placeholder="¿Qué maquinaria necesitas arrendar hoy?">
-        <button class="btn btn-warning fw-bold px-4" onclick="ejecutarBusqueda()">Buscar 🔍</button>
+<!-- NAVBAR SUPERIOR -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+    <div class="container">
+        <a class="navbar-brand text-warning" href="/">🏗️ BuildCorp | Gestión de Activos y Obras</a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/admin/" target="_blank" class="btn btn-outline-warning btn-sm">⚙️ Django Admin</a>
+            <a href="/api/docs/" target="_blank" class="btn btn-outline-info btn-sm">📄 API Swagger</a>
+            {% if user.is_authenticated %}
+                <span class="text-light ms-2 small">Operador: <strong>{{ user.username }}</strong></span>
+                <a href="/logout/" class="btn btn-danger btn-sm ms-2">Cerrar Sesión</a>
+            {% else %}
+                <a href="/login/" class="btn btn-warning btn-sm ms-2 fw-bold">Iniciar Sesión</a>
+            {% endif %}
+        </div>
     </div>
-    
-    <div class="d-flex justify-content-center gap-4 flex-wrap mt-3">
-        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('Excavadoras')">
-            <span class="fs-2">🚜</span><br><small>Excavadoras</small>
-        </div>
-        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('Grúas')">
-            <span class="fs-2">🏗️</span><br><small>Grúas</small>
-        </div>
-        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('Generadores')">
-            <span class="fs-2">⚡</span><br><small>Generadores</small>
-        </div>
-        <div class="text-center" style="cursor:pointer" onclick="cargarCatalogo('')">
-            <span class="fs-2">📋</span><br><small>Ver Todo</small>
-        </div>
-    </div>
-</div>
+</nav>
 
-<div class="row">
-    <!-- CATÁLOGO PRINCIPAL -->
-    <div class="col-lg-8">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="fw-bold" id="titulo-seccion">Maquinaria Disponible</h3>
-            <div id="btn-add-admin"></div>
+<div class="container my-4">
+    <!-- PANEL DE ALERTA Y CONTROL RÁPIDO -->
+    <div class="alert alert-secondary d-flex justify-content-between align-items-center shadow-sm">
+        <div>
+            <strong>Estado del Sistema:</strong> Control centralizado de herramientas, préstamos con firma digital, mantenimiento preventivo y bloqueo automático de contratistas morosos.
         </div>
-        <div class="row g-3" id="maquinarias-list"></div>
+        <button class="btn btn-danger btn-sm fw-bold" onclick="ejecutarBarridoMorosidad()">
+            🚨 Verificar Morosidad y Bloquear Atrasados
+        </button>
     </div>
 
-    <!-- BARRA LATERAL (CARRITO / RESUMEN) -->
-    <div class="col-lg-4">
-        <div class="card shadow-sm border-0 sticky-top" style="top: 20px;">
-            <div class="card-header bg-light fw-bold" id="sidebar-title">
-                Cargando...
-            </div>
-            <div class="card-body" id="sidebar-content"></div>
-        </div>
-    </div>
-</div>
+    <!-- PESTAÑAS DE NAVEGACIÓN -->
+    <ul class="nav nav-tabs mb-4" id="buildcorpTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#tab-activos" type="button">
+                1. Catálogo y Trazabilidad de Activos
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-prestamos" type="button">
+                2. Préstamos y Firma Digital
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-mantenimientos" type="button">
+                3. Mantenimiento Preventivo
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-contratistas" type="button">
+                4. Contratistas y Morosidad
+            </button>
+        </li>
+    </ul>
 
-<!-- ========================================== -->
-<!-- MODALES DEL SISTEMA -->
-<!-- ========================================== -->
-
-<!-- 1. MODAL DE DETALLE -->
-<div class="modal fade" id="detalleModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="modalDetalleNombre">Detalle de Maquinaria</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <img id="modalDetalleImagen" src="" class="img-fluid rounded" alt="Imagen">
+    <div class="tab-content">
+        <!-- ================= PESTAÑA 1: CATÁLOGO DE ACTIVOS ================= -->
+        <div class="tab-pane fade show active" id="tab-activos">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card shadow-sm">
+                        <div class="card-header card-header-custom">+ Registrar Nueva Herramienta</div>
+                        <div class="card-body">
+                            <form id="formHerramienta" onsubmit="crearHerramienta(event)">
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Código Interno</label>
+                                    <input type="text" id="h_codigo" class="form-control form-control-sm" placeholder="Ej: TAL-001" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Nombre de Herramienta</label>
+                                    <input type="text" id="h_nombre" class="form-control form-control-sm" placeholder="Ej: Rotomartillo Industrial Bosch" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Categoría</label>
+                                    <input type="text" id="h_categoria" class="form-control form-control-sm" placeholder="Ej: Demolición / Eléctrica" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Bodega / Obra Inicial</label>
+                                    <input type="text" id="h_bodega" class="form-control form-control-sm" value="Bodega Central" required>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col">
+                                        <label class="form-label small fw-bold">Tarifa Diaria ($)</label>
+                                        <input type="number" id="h_tarifa" class="form-control form-control-sm" value="15000" required>
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label small fw-bold">Límite Hrs Mant.</label>
+                                        <input type="number" id="h_limite_hrs" class="form-control form-control-sm" value="100" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Fecha Próximo Mantenimiento</label>
+                                    <input type="date" id="h_fecha_mant" class="form-control form-control-sm">
+                                </div>
+                                <button type="submit" class="btn btn-warning w-100 fw-bold">Guardar Activo</button>
+                            </form>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <h4 class="text-primary fw-bold" id="modalDetallePrecio"></h4>
-                        <p id="modalDetalleDescripcion" class="text-muted mt-3"></p>
-                        <p><strong>Stock disponible:</strong> <span id="modalDetalleStock"></span></p>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <span>Inventario Distribuido en Obras</span>
+                            <select id="filtroEstadoActivo" class="form-select form-select-sm w-auto" onchange="cargarHerramientas()">
+                                <option value="">Todos los Estados</option>
+                                <option value="DISPONIBLE">Disponible</option>
+                                <option value="EN_USO">En Uso</option>
+                                <option value="MANTENIMIENTO">Mantenimiento</option>
+                                <option value="DADO_DE_BAJA">Dado de Baja</option>
+                            </select>
+                        </div>
+                        <div class="card-body table-responsive">
+                            <table class="table table-hover align-middle small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Herramienta</th>
+                                        <th>Ubicación Actual</th>
+                                        <th>Estado</th>
+                                        <th>Uso (Hrs / Límite)</th>
+                                        <th>Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaHerramientas"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= PESTAÑA 2: PRÉSTAMOS Y FIRMA DIGITAL ================= -->
+        <div class="tab-pane fade" id="tab-prestamos">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <div class="card shadow-sm">
+                        <div class="card-header card-header-custom">✍️ Entrega de Herramienta con Firma Digital</div>
+                        <div class="card-body">
+                            <form id="formPrestamo" onsubmit="crearPrestamo(event)">
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Seleccionar Herramienta (Disponibles)</label>
+                                    <select id="p_herramienta" class="form-select form-select-sm" required></select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Subcontratista / Responsable</label>
+                                    <select id="p_contratista" class="form-select form-select-sm" required></select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Obra de Destino</label>
+                                    <input type="text" id="p_obra" class="form-control form-control-sm" placeholder="Ej: Edificio Los Andes - Piso 4" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Fecha Límite de Devolución</label>
+                                    <input type="date" id="p_fecha_limite" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold d-block">Firma Digital del Responsable de Obra:</label>
+                                    <canvas id="canvasEntrega" width="360" height="120" class="signature-pad w-100"></canvas>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mt-1" onclick="limpiarCanvas('canvasEntrega')">Limpiar Firma</button>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100 fw-bold mt-2">Registrar Entrega de Equipo</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-7">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-dark text-white">Registro de Préstamos Activos e Históricos</div>
+                        <div class="card-body table-responsive">
+                            <table class="table table-bordered align-middle small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Herramienta</th>
+                                        <th>Contratista / Obra</th>
+                                        <th>Límite</th>
+                                        <th>Estado</th>
+                                        <th>Firmas</th>
+                                        <th>Devolución</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaPrestamos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= PESTAÑA 3: MANTENIMIENTO PREVENTIVO ================= -->
+        <div class="tab-pane fade" id="tab-mantenimientos">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card shadow-sm">
+                        <div class="card-header card-header-custom">🔧 Programar Mantenimiento</div>
+                        <div class="card-body">
+                            <form id="formMantenimiento" onsubmit="crearMantenimiento(event)">
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Herramienta</label>
+                                    <select id="m_herramienta" class="form-select form-select-sm" required></select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Tipo de Mantenimiento</label>
+                                    <select id="m_tipo" class="form-select form-select-sm">
+                                        <option value="PREVENTIVO">Preventivo (Por Horas/Fecha)</option>
+                                        <option value="CORRECTIVO">Correctivo (Falla en Obra)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Técnico / Taller Responsable</label>
+                                    <input type="text" id="m_tecnico" class="form-control form-control-sm" placeholder="Ej: Ing. Carlos Soto" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Costo Estimado ($)</label>
+                                    <input type="number" id="m_costo" class="form-control form-control-sm" value="25000" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Descripción / Hoja de Vida</label>
+                                    <textarea id="m_desc" class="form-control form-control-sm" rows="2" placeholder="Cambio de carbones, lubricación y ajuste..." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-warning w-100 fw-bold">Enviar a Mantenimiento</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-dark text-white">Hoja de Vida y Mantenimientos Programados</div>
+                        <div class="card-body table-responsive">
+                            <table class="table table-hover align-middle small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Equipo</th>
+                                        <th>Tipo</th>
+                                        <th>Fecha</th>
+                                        <th>Técnico</th>
+                                        <th>Trabajo Realizado</th>
+                                        <th>Estado</th>
+                                        <th>Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaMantenimientos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= PESTAÑA 4: CONTRATISTAS Y MOROSIDAD ================= -->
+        <div class="tab-pane fade" id="tab-contratistas">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card shadow-sm">
+                        <div class="card-header card-header-custom">👷 Registrar Subcontratista</div>
+                        <div class="card-body">
+                            <form id="formContratista" onsubmit="crearContratista(event)">
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">RUT Empresa</label>
+                                    <input type="text" id="c_rut" class="form-control form-control-sm" placeholder="Ej: 76.543.210-K" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Nombre Empresa Subcontratista</label>
+                                    <input type="text" id="c_empresa" class="form-control form-control-sm" placeholder="Ej: Constructora Sur SpA" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Responsable de Obra</label>
+                                    <input type="text" id="c_responsable" class="form-control form-control-sm" placeholder="Ej: Roberto Gómez" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Teléfono</label>
+                                    <input type="text" id="c_telefono" class="form-control form-control-sm" placeholder="+56 9 8765 4321" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Correo Electrónico</label>
+                                    <input type="email" id="c_email" class="form-control form-control-sm" placeholder="contacto@constructorasur.cl" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100 fw-bold">Registrar Contratista</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-dark text-white">Control de Subcontratistas y Bloqueos por Morosidad</div>
+                        <div class="card-body table-responsive">
+                            <table class="table table-hover align-middle small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>RUT</th>
+                                        <th>Empresa</th>
+                                        <th>Responsable</th>
+                                        <th>Contacto</th>
+                                        <th>Estado Morosidad</th>
+                                        <th>Control Manual</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaContratistas"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -73,444 +337,417 @@
     </div>
 </div>
 
-<!-- 2. MODAL DE ARRIENDO (CLIENTES) -->
-<div class="modal fade" id="arriendoModal" tabindex="-1">
+<!-- MODAL PARA DEVOLUCIÓN DE HERRAMIENTA CON FIRMA DIGITAL -->
+<div class="modal fade" id="modalDevolucion" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="modalNombreMaquina">Arrendar</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="modalIdMaquina">
-                <input type="hidden" id="modalStockMaximo">
-                
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Fecha de Inicio</label>
-                    <input type="date" class="form-control" id="fechaInicioRenta">
-                    <small class="text-muted">No puede ser anterior a hoy.</small>
-                </div>
-                
-                <div class="row">
-                    <div class="col-6 mb-3">
-                        <label class="form-label fw-bold">Días de Arriendo</label>
-                        <input type="number" class="form-control" id="diasRenta" value="1" min="1">
-                    </div>
-                    <div class="col-6 mb-3">
-                        <label class="form-label fw-bold">Cant. Máquinas</label>
-                        <input type="number" class="form-control" id="cantidadRenta" value="1" min="1">
-                    </div>
-                </div>
-
-                <div class="alert alert-info py-2" id="resumenFechas">
-                    Terminará el: <strong id="textoFechaFin">...</strong>
-                </div>
-
-                <button class="btn btn-warning w-100 fw-bold" onclick="confirmarArriendo()">Confirmar al Carrito</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 3. NUEVO: MODAL DE GESTIÓN (ADMIN/GERENTE CRUD) -->
-<div class="modal fade" id="gestionModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title fw-bold" id="modalGestionTitulo">Añadir Maquinaria</h5>
+            <div class="modal-header bg-dark text-warning">
+                <h5 class="modal-title fw-bold">Recepción y Devolución de Herramienta</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <!-- Formulario que interceptamos con JS -->
-            <form id="formGestion" onsubmit="guardarMaquinaria(event)">
-                <div class="modal-body">
-                    <input type="hidden" id="formGestionId">
-                    
-                    <div class="mb-2">
-                        <label class="form-label fw-bold">Nombre del Equipo</label>
-                        <input type="text" class="form-control" id="formNombre" required>
-                    </div>
-                    
-                    <div class="mb-2">
-                        <label class="form-label fw-bold">Categoría</label>
-                        <!-- Opciones predefinidas o escritura libre -->
-                        <input type="text" class="form-control" id="formCategoria" placeholder="Ej: Excavadoras, Grúas, etc." required>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-6 mb-2">
-                            <label class="form-label fw-bold">Tarifa Diaria ($)</label>
-                            <input type="number" class="form-control" id="formTarifa" required min="0">
-                        </div>
-                        <div class="col-6 mb-2">
-                            <label class="form-label fw-bold">Garantía ($)</label>
-                            <input type="number" class="form-control" id="formGarantia" required min="0">
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-6 mb-2">
-                            <label class="form-label fw-bold">Stock Físico</label>
-                            <input type="number" class="form-control" id="formStock" required min="0">
-                        </div>
-                        <div class="col-6 mb-2">
-                            <label class="form-label fw-bold">URL de la Imagen</label>
-                            <input type="url" class="form-control" id="formImagen" placeholder="https://...">
-                        </div>
-                    </div>
-                    
-                    <div class="mb-2">
-                        <label class="form-label fw-bold">Descripción / Detalles Técnicos</label>
-                        <textarea class="form-control" id="formDescripcion" rows="3"></textarea>
-                    </div>
+            <div class="modal-body">
+                <input type="hidden" id="dev_prestamo_id">
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Horas de Uso Registradas en este Préstamo</label>
+                    <input type="number" id="dev_horas" class="form-control" value="25" min="1" required>
+                    <div class="form-text">Si las horas acumuladas superan el límite, el activo pasará automáticamente a Mantenimiento.</div>
                 </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-success w-100 fw-bold">💾 Guardar Cambios</button>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Bodega de Retorno</label>
+                    <input type="text" id="dev_bodega" class="form-control" value="Bodega Central" required>
                 </div>
-            </form>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold d-block">Firma Digital de Conformidad en Devolución:</label>
+                    <canvas id="canvasDevolucion" width="420" height="130" class="signature-pad w-100"></canvas>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-1" onclick="limpiarCanvas('canvasDevolucion')">Limpiar Firma</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success fw-bold" onclick="confirmarDevolucion()">Confirmar Devolución</button>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- ========================================== -->
-<!-- SCRIPT PRINCIPAL -->
-<!-- ========================================== -->
+<!-- FOOTER CON DATOS DEL ALUMNO -->
+<footer class="text-center">
+    <div class="container">
+        <p class="mb-0 fw-bold text-white">Proyecto 4: BuildCorp - Sistema de Alquiler y Control de Herramientas</p>
+        <small>Desarrollado por: <strong>Bastian Andres Fernandez Neira</strong> | Sección: <strong>AP-N4-C2</strong> | Año: <strong>2026</strong></small>
+    </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    let rolUsuario = 'Visitante';
-    let arriendoModal, detalleModal, gestionModal;
+    // === CONFIGURACIÓN DE PIZARRAS DE FIRMA DIGITAL (CANVAS) ===
+    const estadoCanvas = {};
 
-    document.addEventListener('DOMContentLoaded', () => {
-        // Inicializar Modales
-        arriendoModal = new bootstrap.Modal(document.getElementById('arriendoModal'));
-        detalleModal = new bootstrap.Modal(document.getElementById('detalleModal'));
-        gestionModal = new bootstrap.Modal(document.getElementById('gestionModal'));
-        
-        document.getElementById('fechaInicioRenta').addEventListener('change', actualizarFechaFin);
-        document.getElementById('diasRenta').addEventListener('input', actualizarFechaFin);
+    function inicializarCanvas(idCanvas) {
+        const canvas = document.getElementById(idCanvas);
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#0d6efd';
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+        estadoCanvas[idCanvas] = { dibujando: false, firmado: false };
 
-        // Identificar usuario
-        const token = localStorage.getItem('access_token');
-        if (token) {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            rolUsuario = payload.rol;
-            if (rolUsuario !== 'Ejecutivo de Arriendos') {
-                const docsLink = document.getElementById('link-docs-api');
-                if (docsLink) docsLink.style.display = 'none';
-            }
-        }
-        
-        configurarInterfaz();
-        cargarCatalogo();
-    });
-
-    function configurarInterfaz() {
-        if (rolUsuario === 'Ejecutivo de Arriendos') {
-            document.getElementById('titulo-seccion').innerText = "Inventario General de Maquinaria";
-            // BOTÓN FRONTEND PARA CREAR
-            document.getElementById('btn-add-admin').innerHTML = `<button class="btn btn-primary btn-sm fw-bold" onclick="abrirModalCrear()">+ Añadir Nueva Maquinaria</button>`;
-            document.getElementById('sidebar-title').innerText = "Resumen de Inventario";
-            cargarResumenAdmin();
-        } else {
-            document.getElementById('titulo-seccion').innerText = "Maquinaria Disponible";
-            document.getElementById('sidebar-title').innerText = "Mi Carrito de Arriendo";
-            if (rolUsuario === 'Empresa Constructora') cargarCarritoSidebar();
-            else document.getElementById('sidebar-content').innerHTML = `<p class="text-muted text-center mt-3">Inicia sesión para usar el carrito.</p>`;
-        }
-    }
-
-    /* ---------------------------------------------------
-       LÓGICA DEL CATÁLOGO Y BÚSQUEDA
-    --------------------------------------------------- */
-    async function cargarCatalogo(categoria = '', busqueda = '') {
-        try {
-            const res = await fetch('/api/maquinarias/');
-            let data = await res.json();
-            
-            if (categoria) data = data.filter(maq => maq.categoria === categoria);
-            if (busqueda) {
-                const query = busqueda.toLowerCase();
-                data = data.filter(maq => 
-                    maq.nombre.toLowerCase().includes(query) || 
-                    maq.categoria.toLowerCase().includes(query) ||
-                    (maq.descripcion && maq.descripcion.toLowerCase().includes(query))
-                );
-            }
-
-            const contenedor = document.getElementById('maquinarias-list');
-            contenedor.innerHTML = '';
-
-            if (data.length === 0) {
-                contenedor.innerHTML = `<div class="col-12 text-center mt-5"><h4 class="text-muted">No encontramos maquinaria que coincida.</h4></div>`;
-                return;
-            }
-
-            data.forEach(maq => {
-                const descSegura = maq.descripcion ? maq.descripcion.replace(/"/g, '&quot;').replace(/\n/g, '<br>') : '';
-                const nomSeguro = maq.nombre.replace(/'/g, "\\'"); 
-                
-                let botones = '';
-                if (rolUsuario === 'Ejecutivo de Arriendos') {
-                    // BOTONES FRONTEND CRUD PARA EL GERENTE
-                    botones = `
-                        <div class="d-flex gap-1 mt-2">
-                            <button class="btn btn-warning btn-sm w-50 text-white fw-bold" onclick="abrirModalEditar(${maq.id})">✏️ Editar</button>
-                            <button class="btn btn-danger btn-sm w-50 fw-bold" onclick="eliminarMaquinaria(${maq.id})">🗑️ Eliminar</button>
-                        </div>
-                    `;
-                } else {
-                    botones = `
-                        <div class="d-flex gap-1 mt-2">
-                            <button class="btn btn-outline-secondary btn-sm w-50" onclick="mostrarDetalle('${nomSeguro}', '${descSegura}', '${maq.imagen_url}', ${maq.tarifa_diaria}, ${maq.stock_disponible})">Detalles</button>
-                            <button class="btn btn-warning btn-sm w-50 fw-bold text-white" onclick="abrirModalArriendo(${maq.id}, '${nomSeguro}', ${maq.stock_disponible})" ${maq.stock_disponible < 1 ? 'disabled' : ''}>Arrendar</button>
-                        </div>
-                    `;
-                }
-
-                contenedor.innerHTML += `
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card h-100 shadow-sm border-0">
-                            <span class="position-absolute top-0 end-0 badge ${maq.stock_disponible > 0 ? 'bg-success' : 'bg-danger'} m-2">Stock: ${maq.stock_disponible}</span>
-                            <img src="${maq.imagen_url || 'https://via.placeholder.com/300x200'}" class="card-img-top" style="height: 160px; object-fit: cover;">
-                            <div class="card-body d-flex flex-column">
-                                <span class="text-muted small text-uppercase">${maq.categoria}</span>
-                                <h6 class="fw-bold mt-1">${maq.nombre}</h6>
-                                <h5 class="text-primary mt-auto border-top pt-2 mt-2">Desde $${parseFloat(maq.tarifa_diaria).toLocaleString('es-CL')}<small>/día</small></h5>
-                                ${botones}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-        } catch (error) {
-            console.error("Error cargando catálogo:", error);
-        }
-    }
-
-    function ejecutarBusqueda() {
-        cargarCatalogo('', document.getElementById('buscadorInput').value); 
-    }
-
-    function mostrarDetalle(nombre, descripcion, imagen, precio, stock) {
-        document.getElementById('modalDetalleNombre').innerText = nombre;
-        document.getElementById('modalDetalleImagen').src = imagen || 'https://via.placeholder.com/300x200';
-        document.getElementById('modalDetallePrecio').innerText = `$${parseFloat(precio).toLocaleString('es-CL')} / día`;
-        document.getElementById('modalDetalleDescripcion').innerHTML = descripcion;
-        document.getElementById('modalDetalleStock').innerText = stock;
-        detalleModal.show();
-    }
-
-    /* ---------------------------------------------------
-       NUEVO: LÓGICA CRUD PARA EL GERENTE (FRONTEND)
-    --------------------------------------------------- */
-    function abrirModalCrear() {
-        document.getElementById('formGestion').reset();
-        document.getElementById('formGestionId').value = '';
-        document.getElementById('modalGestionTitulo').innerText = 'Añadir Nueva Maquinaria';
-        gestionModal.show();
-    }
-
-    async function abrirModalEditar(id) {
-        // Traemos los datos de la máquina específica desde la API
-        const res = await fetch(`/api/maquinarias/${id}/`);
-        if(res.ok) {
-            const maq = await res.json();
-            document.getElementById('formGestionId').value = maq.id;
-            document.getElementById('formNombre').value = maq.nombre;
-            document.getElementById('formCategoria').value = maq.categoria;
-            document.getElementById('formTarifa').value = maq.tarifa_diaria;
-            document.getElementById('formGarantia').value = maq.garantia_fija;
-            document.getElementById('formStock').value = maq.stock_disponible;
-            document.getElementById('formImagen').value = maq.imagen_url || '';
-            document.getElementById('formDescripcion').value = maq.descripcion || '';
-            
-            document.getElementById('modalGestionTitulo').innerText = 'Editar Equipo';
-            gestionModal.show();
-        }
-    }
-
-    async function guardarMaquinaria(e) {
-        e.preventDefault(); // Evitamos recargar la página
-        const id = document.getElementById('formGestionId').value;
-        const method = id ? 'PUT' : 'POST'; // Si hay ID es edición, sino es creación
-        const url = id ? `/api/maquinarias/${id}/` : '/api/maquinarias/';
-        
-        const payload = {
-            nombre: document.getElementById('formNombre').value,
-            categoria: document.getElementById('formCategoria').value,
-            tarifa_diaria: document.getElementById('formTarifa').value,
-            garantia_fija: document.getElementById('formGarantia').value,
-            stock_disponible: document.getElementById('formStock').value,
-            imagen_url: document.getElementById('formImagen').value,
-            descripcion: document.getElementById('formDescripcion').value
+        const obtenerPos = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
         };
 
-        const res = await fetch(url, {
-            method: method,
-            headers: getAuthHeaders(),
+        const iniciar = (e) => {
+            e.preventDefault();
+            estadoCanvas[idCanvas].dibujando = true;
+            estadoCanvas[idCanvas].firmado = true;
+            const pos = obtenerPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+        };
+
+        const mover = (e) => {
+            if (!estadoCanvas[idCanvas].dibujando) return;
+            e.preventDefault();
+            const pos = obtenerPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        };
+
+        const detener = () => { estadoCanvas[idCanvas].dibujando = false; };
+
+        canvas.addEventListener('mousedown', iniciar);
+        canvas.addEventListener('mousemove', mover);
+        window.addEventListener('mouseup', detener);
+        canvas.addEventListener('touchstart', iniciar, { passive: false });
+        canvas.addEventListener('touchmove', mover, { passive: false });
+        window.addEventListener('touchend', detener);
+    }
+
+    function limpiarCanvas(idCanvas) {
+        const canvas = document.getElementById(idCanvas);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (estadoCanvas[idCanvas]) estadoCanvas[idCanvas].firmado = false;
+    }
+
+    // === CARGA DE DATOS DESDE LA API DRF ===
+    async function cargarTodo() {
+        await cargarHerramientas();
+        await cargarContratistas();
+        await cargarPrestamos();
+        await cargarMantenimientos();
+    }
+
+    async function cargarHerramientas() {
+        const filtro = document.getElementById('filtroEstadoActivo').value;
+        const url = filtro ? `/api/herramientas/?estado=${filtro}` : '/api/herramientas/';
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const tbody = document.getElementById('tablaHerramientas');
+        const selectPrestamo = document.getElementById('p_herramienta');
+        const selectMant = document.getElementById('m_herramienta');
+
+        tbody.innerHTML = '';
+        selectPrestamo.innerHTML = '<option value="">-- Seleccione herramienta disponible --</option>';
+        selectMant.innerHTML = '<option value="">-- Seleccione herramienta --</option>';
+
+        const badges = {
+            'DISPONIBLE': 'bg-success',
+            'EN_USO': 'bg-primary',
+            'MANTENIMIENTO': 'bg-warning text-dark',
+            'DADO_DE_BAJA': 'bg-danger'
+        };
+
+        data.forEach(h => {
+            const alertaIcon = h.alerta_mantenimiento ? '⚠️ <span class="text-danger fw-bold">Requiere Mant.</span>' : '';
+            tbody.innerHTML += `
+                <tr>
+                    <td class="fw-bold">${h.codigo_interno}</td>
+                    <td>${h.nombre}<br><small class="text-muted">${h.categoria}</small></td>
+                    <td>📍 ${h.bodega_obra}</td>
+                    <td><span class="badge ${badges[h.estado] || 'bg-secondary'}">${h.estado_display}</span></td>
+                    <td>${h.horas_uso_acumuladas} / ${h.limite_horas_mantenimiento} hrs ${alertaIcon}</td>
+                    <td>
+                        <button class="btn btn-outline-danger btn-sm" onclick="eliminarHerramienta(${h.id})">Eliminar</button>
+                    </td>
+                </tr>
+            `;
+
+            if (h.estado === 'DISPONIBLE') {
+                selectPrestamo.innerHTML += `<option value="${h.id}">[${h.codigo_interno}] ${h.nombre}</option>`;
+            }
+            selectMant.innerHTML += `<option value="${h.id}">[${h.codigo_interno}] ${h.nombre} (${h.estado_display})</option>`;
+        });
+    }
+
+    async function crearHerramienta(e) {
+        e.preventDefault();
+        const payload = {
+            codigo_interno: document.getElementById('h_codigo').value,
+            nombre: document.getElementById('h_nombre').value,
+            categoria: document.getElementById('h_categoria').value,
+            bodega_obra: document.getElementById('h_bodega').value,
+            tarifa_diaria: document.getElementById('h_tarifa').value,
+            limite_horas_mantenimiento: document.getElementById('h_limite_hrs').value,
+            fecha_proximo_mantenimiento: document.getElementById('h_fecha_mant').value || null
+        };
+        const res = await fetch('/api/herramientas/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            document.getElementById('formHerramienta').reset();
+            cargarTodo();
+        } else {
+            const err = await res.json();
+            alert('Error al guardar activo: ' + JSON.stringify(err));
+        }
+    }
+
+    async function eliminarHerramienta(id) {
+        if (!confirm('¿Confirmas eliminar este activo?')) return;
+        await fetch(`/api/herramientas/${id}/`, { method: 'DELETE' });
+        cargarTodo();
+    }
+
+    // === CONTRATISTAS Y MOROSIDAD ===
+    async function cargarContratistas() {
+        const res = await fetch('/api/contratistas/');
+        const data = await res.json();
+        const tbody = document.getElementById('tablaContratistas');
+        const selectContratista = document.getElementById('p_contratista');
+
+        tbody.innerHTML = '';
+        selectContratista.innerHTML = '<option value="">-- Seleccione contratista --</option>';
+
+        data.forEach(c => {
+            const badge = c.bloqueado_por_morosidad
+                ? '<span class="badge bg-danger">BLOQUEADO POR MOROSIDAD</span>'
+                : '<span class="badge bg-success">HABILITADO / AL DÍA</span>';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td class="fw-bold">${c.rut}</td>
+                    <td>${c.nombre_empresa}</td>
+                    <td>${c.responsable_obra}</td>
+                    <td>${c.telefono}<br><small>${c.email}</small></td>
+                    <td>${badge}</td>
+                    <td>
+                        <button class="btn btn-sm ${c.bloqueado_por_morosidad ? 'btn-success' : 'btn-outline-danger'}" onclick="alternarBloqueoContratista(${c.id})">
+                            ${c.bloqueado_por_morosidad ? 'Desbloquear' : 'Bloquear'}
+                        </button>
+                    </td>
+                </tr>
+            `;
+
+            const textoEstado = c.bloqueado_por_morosidad ? ' [BLOQUEADO - MOROSO]' : '';
+            selectContratista.innerHTML += `<option value="${c.id}">${c.nombre_empresa} (${c.responsable_obra})${textoEstado}</option>`;
+        });
+    }
+
+    async function crearContratista(e) {
+        e.preventDefault();
+        const payload = {
+            rut: document.getElementById('c_rut').value,
+            nombre_empresa: document.getElementById('c_empresa').value,
+            responsable_obra: document.getElementById('c_responsable').value,
+            telefono: document.getElementById('c_telefono').value,
+            email: document.getElementById('c_email').value
+        };
+        const res = await fetch('/api/contratistas/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            document.getElementById('formContratista').reset();
+            cargarContratistas();
+        } else {
+            alert('Error al registrar contratista: ' + JSON.stringify(await res.json()));
+        }
+    }
+
+    async function alternarBloqueoContratista(id) {
+        await fetch(`/api/contratistas/${id}/alternar_bloqueo/`, { method: 'POST' });
+        cargarContratistas();
+    }
+
+    // === PRÉSTAMOS Y FIRMA DIGITAL ===
+    async function cargarPrestamos() {
+        const res = await fetch('/api/prestamos/');
+        const data = await res.json();
+        const tbody = document.getElementById('tablaPrestamos');
+        tbody.innerHTML = '';
+
+        data.forEach(p => {
+            let badgeClass = 'bg-primary';
+            if (p.estado === 'DEVUELTO') badgeClass = 'bg-secondary';
+            if (p.esta_atrasado || p.estado === 'ATRASADO') badgeClass = 'bg-danger';
+
+            const imgEntrega = p.firma_digital_entrega ? `<img src="${p.firma_digital_entrega}" style="height:28px; border:1px solid #ccc; background:#fff;" title="Firma Entrega">` : '';
+            const imgDevolucion = p.firma_digital_devolucion ? `<img src="${p.firma_digital_devolucion}" style="height:28px; border:1px solid #ccc; background:#fff;" title="Firma Devolución">` : '';
+
+            const btnDevolver = p.estado !== 'DEVUELTO'
+                ? `<button class="btn btn-sm btn-warning fw-bold" onclick="abrirModalDevolucion(${p.id})">Devolver</button>`
+                : `<span class="text-muted small">Devuelto (${p.horas_usadas_en_prestamo} hrs)</span>`;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>#${p.id}</td>
+                    <td><strong>${p.herramienta_codigo}</strong><br>${p.herramienta_nombre}</td>
+                    <td>${p.contratista_nombre}<br><small class="text-muted">📍 ${p.obra_destino}</small></td>
+                    <td>${p.fecha_devolucion_esperada}</td>
+                    <td><span class="badge ${badgeClass}">${p.esta_atrasado && p.estado === 'ACTIVO' ? 'VENCIDO / MORA' : p.estado}</span></td>
+                    <td>${imgEntrega} ${imgDevolucion}</td>
+                    <td>${btnDevolver}</td>
+                </tr>
+            `;
+        });
+    }
+
+    async function crearPrestamo(e) {
+        e.preventDefault();
+        if (!estadoCanvas['canvasEntrega'].firmado) {
+            alert('Por favor, dibuje la firma digital del responsable de obra antes de entregar la herramienta.');
+            return;
+        }
+        const firmaBase64 = document.getElementById('canvasEntrega').toDataURL('image/png');
+        const payload = {
+            herramienta: document.getElementById('p_herramienta').value,
+            contratista: document.getElementById('p_contratista').value,
+            obra_destino: document.getElementById('p_obra').value,
+            fecha_devolucion_esperada: document.getElementById('p_fecha_limite').value,
+            firma_digital_entrega: firmaBase64
+        };
+
+        const res = await fetch('/api/prestamos/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
         if (res.ok) {
-            gestionModal.hide();
-            cargarCatalogo(); // Recargamos el catálogo visual
-            cargarResumenAdmin(); // Actualizamos los contadores
-            alert(id ? 'Equipo actualizado con éxito.' : 'Equipo registrado con éxito.');
+            document.getElementById('formPrestamo').reset();
+            limpiarCanvas('canvasEntrega');
+            cargarTodo();
+            alert('✅ Herramienta entregada con éxito y firma digital registrada.');
         } else {
-            alert('Error al guardar la maquinaria. Verifica los datos.');
+            const err = await res.json();
+            alert('❌ No se pudo procesar el préstamo:\n' + JSON.stringify(err));
+            cargarContratistas();
         }
     }
 
-    async function eliminarMaquinaria(id) {
-        if (!confirm('¿Estás COMPLETAMENTE SEGURO de eliminar este equipo del inventario?')) return;
-        
-        const res = await fetch(`/api/maquinarias/${id}/`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-        
-        if (res.ok) {
-            cargarCatalogo();
-            cargarResumenAdmin();
-        } else {
-            alert('Error al eliminar. Puede que tenga contratos asociados.');
+    let modalDevInstance = null;
+    function abrirModalDevolucion(idPrestamo) {
+        document.getElementById('dev_prestamo_id').value = idPrestamo;
+        limpiarCanvas('canvasDevolucion');
+        if (!modalDevInstance) {
+            modalDevInstance = new bootstrap.Modal(document.getElementById('modalDevolucion'));
         }
+        modalDevInstance.show();
     }
 
-    /* ---------------------------------------------------
-       LÓGICA DE CLIENTES: ARRIENDO Y CHECKOUT
-    --------------------------------------------------- */
-    function abrirModalArriendo(id, nombre, stock) {
-        document.getElementById('modalIdMaquina').value = id;
-        document.getElementById('modalStockMaximo').value = stock;
-        document.getElementById('modalNombreMaquina').innerText = `Arrendar: ${nombre}`;
-        
-        const hoy = new Date().toISOString().split('T')[0];
-        document.getElementById('fechaInicioRenta').min = hoy;
-        document.getElementById('fechaInicioRenta').value = hoy;
-        document.getElementById('diasRenta').value = 1;
-        document.getElementById('cantidadRenta').value = 1;
-        
-        actualizarFechaFin();
-        arriendoModal.show();
-    }
-
-    function actualizarFechaFin() {
-        const inicioStr = document.getElementById('fechaInicioRenta').value;
-        const dias = parseInt(document.getElementById('diasRenta').value) || 1;
-        if (inicioStr) {
-            const fecha = new Date(inicioStr + 'T00:00:00');
-            fecha.setDate(fecha.getDate() + dias);
-            document.getElementById('textoFechaFin').innerText = fecha.toISOString().split('T')[0];
-        }
-    }
-
-    async function confirmarArriendo() {
-        const id = document.getElementById('modalIdMaquina').value;
-        const inicio = document.getElementById('fechaInicioRenta').value;
-        const dias = parseInt(document.getElementById('diasRenta').value);
-        const cantidad = parseInt(document.getElementById('cantidadRenta').value);
-        const stockMaximo = parseInt(document.getElementById('modalStockMaximo').value);
-
-        if (!inicio) return alert("Ingresa la fecha de inicio.");
-        if (cantidad > stockMaximo) return alert(`Solo hay ${stockMaximo} unidades disponibles.`);
-
-        const fecha = new Date(inicio + 'T00:00:00');
-        fecha.setDate(fecha.getDate() + dias);
-        const fin = fecha.toISOString().split('T')[0];
-
-        const res = await fetch('/api/carro-items/', {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ maquinaria: id, fecha_inicio: inicio, fecha_fin: fin, cantidad: cantidad })
-        });
-
-        if (res.ok) {
-            arriendoModal.hide();
-            cargarCarritoSidebar(); 
-        } else {
-            alert("Error al agregar al carrito.");
-        }
-    }
-
-    async function cargarCarritoSidebar() {
-        const res = await fetch('/api/mi-carro/', { headers: getAuthHeaders() });
-        const sidebar = document.getElementById('sidebar-content');
-        if (!res.ok) return;
-
-        const data = await res.json();
-        if (!data.items || data.items.length === 0) {
-            sidebar.innerHTML = `<div class="text-center text-muted my-4">Tu carrito está vacío</div>`;
+    async function confirmarDevolucion() {
+        if (!estadoCanvas['canvasDevolucion'].firmado) {
+            alert('El responsable debe firmar digitalmente la devolución del equipo.');
             return;
         }
+        const id = document.getElementById('dev_prestamo_id').value;
+        const firmaBase64 = document.getElementById('canvasDevolucion').toDataURL('image/png');
+        const payload = {
+            horas_usadas_en_prestamo: document.getElementById('dev_horas').value,
+            bodega_retorno: document.getElementById('dev_bodega').value,
+            firma_digital_devolucion: firmaBase64
+        };
 
-        let html = '<ul class="list-group list-group-flush mb-3">';
-        let total = 0;
-        data.items.forEach(item => {
-            total += parseFloat(item.subtotal);
-            html += `
-                <li class="list-group-item px-0 py-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="fw-bold d-block text-truncate" style="max-width: 150px;">${item.maquinaria_detalle.nombre}</span>
-                            <small class="text-muted">${item.cantidad} unidad(es) x ${item.dias_arriendo} día(s)</small>
-                        </div>
-                        <div class="text-end">
-                            <span class="text-primary d-block fw-bold">$${parseFloat(item.subtotal).toLocaleString('es-CL')}</span>
-                            <button class="btn btn-sm text-danger p-0 mt-1" onclick="eliminarItemCarro(${item.id})">🗑️ Eliminar</button>
-                        </div>
-                    </div>
-                </li>
-            `;
+        const res = await fetch(`/api/prestamos/${id}/registrar_devolucion/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
-        html += `</ul>
-            <div class="d-flex justify-content-between fw-bold mb-3 fs-5">
-                <span>Total Estimado:</span>
-                <span class="text-success">$${total.toLocaleString('es-CL')}</span>
-            </div>
-            <button class="btn btn-success w-100 fw-bold py-2" onclick="procesarPago()">Pagar Ahora</button>`;
-        
-        sidebar.innerHTML = html;
-        document.getElementById('sidebar-title').innerText = `Mi Carrito (${data.items.length})`;
-    }
 
-    async function eliminarItemCarro(itemId) {
-        if (!confirm("¿Seguro que deseas quitar esto del carrito?")) return;
-        const res = await fetch(`/api/carro-items/${itemId}/`, { method: 'DELETE', headers: getAuthHeaders() });
-        if (res.ok) cargarCarritoSidebar();
-    }
-
-    async function procesarPago() {
-        const res = await fetch('/api/contratos/checkout/', { method: 'POST', headers: getAuthHeaders() });
-        if(res.ok) {
-            alert("¡Pago exitoso! Se ha generado tu contrato.");
-            cargarCarritoSidebar();
-            cargarCatalogo(); 
+        if (res.ok) {
+            const data = await res.json();
+            modalDevInstance.hide();
+            cargarTodo();
+            alert(`✅ ${data.mensaje}\nEstado actual del activo: ${data.nuevo_estado_herramienta}`);
         } else {
-            const errorData = await res.json();
-            alert("Error procesando el pago: " + (errorData.error || "Verifica el stock."));
+            alert('Error al devolver: ' + JSON.stringify(await res.json()));
         }
     }
 
-    /* ---------------------------------------------------
-       LÓGICA DEL PANEL ADMIN (RESUMEN)
-    --------------------------------------------------- */
-    async function cargarResumenAdmin() {
-        const sidebar = document.getElementById('sidebar-content');
-        const res = await fetch('/api/maquinarias/');
-        const maquinas = await res.json();
-        
-        const total = maquinas.length;
-        const disponibles = maquinas.filter(m => m.stock_disponible > 0).length;
-        
-        sidebar.innerHTML = `
-            <div class="alert alert-secondary">
-                <p class="mb-1"><strong>Total Máquinas Registradas:</strong> ${total}</p>
-                <p class="mb-1"><strong>Unidades Disponibles:</strong> ${disponibles}</p>
-                <p class="mb-0 text-danger"><strong>En Terreno / Agotadas:</strong> ${total - disponibles}</p>
-            </div>
-            <h6 class="fw-bold mt-4">Panel de Accesos Directos</h6>
-            <a href="/admin/app/contrato/" target="_blank" class="btn btn-info text-white w-100 mt-2 fw-bold">Ver Contratos y Ventas</a>
-            <a href="/admin/" target="_blank" class="btn btn-dark w-100 mt-2">Ir al Panel Avanzado Django</a>
-        `;
+    async function ejecutarBarridoMorosidad() {
+        const res = await fetch('/api/prestamos/verificar_alertas_morosidad/', { method: 'POST' });
+        const data = await res.json();
+        cargarTodo();
+        alert(`🚨 Barrido completado:\n- Préstamos en morosidad: ${data.prestamos_en_mora}\n- Nuevos contratistas bloqueados automáticamente: ${data.nuevos_contratistas_bloqueados}`);
     }
+
+    // === MANTENIMIENTOS PREVENTIVOS ===
+    async function cargarMantenimientos() {
+        const res = await fetch('/api/mantenimientos/');
+        const data = await res.json();
+        const tbody = document.getElementById('tablaMantenimientos');
+        tbody.innerHTML = '';
+
+        data.forEach(m => {
+            const badge = m.estado === 'COMPLETADO' ? 'bg-success' : 'bg-warning text-dark';
+            const btnCompletar = m.estado !== 'COMPLETADO'
+                ? `<button class="btn btn-sm btn-success" onclick="completarMantenimiento(${m.id})">Liberar Equipo</button>`
+                : '<span class="text-muted small">Finalizado</span>';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${m.herramienta_codigo}</strong><br>${m.herramienta_nombre}</td>
+                    <td>${m.tipo_display}</td>
+                    <td>${m.fecha_programada}</td>
+                    <td>${m.tecnico_responsable}</td>
+                    <td>${m.descripcion_trabajo}<br><small class="text-muted">Costo: $${m.costo}</small></td>
+                    <td><span class="badge ${badge}">${m.estado_display}</span></td>
+                    <td>${btnCompletar}</td>
+                </tr>
+            `;
+        });
+    }
+
+    async function crearMantenimiento(e) {
+        e.preventDefault();
+        const payload = {
+            herramienta: document.getElementById('m_herramienta').value,
+            tipo: document.getElementById('m_tipo').value,
+            tecnico_responsable: document.getElementById('m_tecnico').value,
+            costo: document.getElementById('m_costo').value,
+            descripcion_trabajo: document.getElementById('m_desc').value
+        };
+        const res = await fetch('/api/mantenimientos/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            document.getElementById('formMantenimiento').reset();
+            cargarTodo();
+        }
+    }
+
+    async function completarMantenimiento(id) {
+        await fetch(`/api/mantenimientos/${id}/completar/`, { method: 'POST' });
+        cargarTodo();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        inicializarCanvas('canvasEntrega');
+        inicializarCanvas('canvasDevolucion');
+        cargarTodo();
+    });
 </script>
-{% endblock %}
+</body>
+</html>

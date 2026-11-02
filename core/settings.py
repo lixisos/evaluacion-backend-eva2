@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-7&yx!@eeqx8s_-i!%q1q=c-gza5z((#5#+5s$wca98denrx3%1
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -81,7 +81,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'arriendos_db', # Nombre de la base de datos
+        'NAME': 'buildcorp_db', # Nombre de la base de datos
         'USER': 'postgres', # Usuario de la base de datos
         'PASSWORD' : '23038165', # Contraseña de la base de datos
         'HOST': 'localhost', # Host de la base de datos

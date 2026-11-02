@@ -1,62 +1,60 @@
 from rest_framework import serializers
-from .models import Maquinaria, CarroArriendo, ItemCarro, Contrato, DetalleContrato
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .models import Herramienta, Contratista, Prestamo, Mantenimiento
 
-# 1. SERIALIZADOR DEL CATÁLOGO
-class MaquinariaSerializer(serializers.ModelSerializer):
+class HerramientaSerializer(serializers.ModelSerializer):
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    alerta_mantenimiento = serializers.SerializerMethodField()
+
     class Meta:
-        model = Maquinaria
+        model = Herramienta
         fields = '__all__'
 
-# 2. SERIALIZADORES DEL CARRO Y SUS ÍTEMS
-class ItemCarroSerializer(serializers.ModelSerializer):
-    # Traemos las propiedades matemáticas que calculan los días y el subtotal desde el modelo
-    dias_arriendo = serializers.ReadOnlyField()
-    subtotal = serializers.ReadOnlyField()
-    # Anidamos los detalles de la máquina para que el frontend vea el nombre y no solo el ID
-    maquinaria_detalle = MaquinariaSerializer(source='maquinaria', read_only=True)
+    def get_alerta_mantenimiento(self, obj):
+        return obj.requiere_mantenimiento()
+
+
+class ContratistaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contratista
+        fields = '__all__'
+
+
+class PrestamoSerializer(serializers.ModelSerializer):
+    herramienta_nombre = serializers.CharField(source='herramienta.nombre', read_only=True)
+    herramienta_codigo = serializers.CharField(source='herramienta.codigo_interno', read_only=True)
+    contratista_nombre = serializers.CharField(source='contratista.nombre_empresa', read_only=True)
+    responsable_obra = serializers.CharField(source='contratista.responsable_obra', read_only=True)
+    esta_atrasado = serializers.BooleanField(read_only=True)
 
     class Meta:
-        model = ItemCarro
-        fields = ['id', 'maquinaria', 'maquinaria_detalle', 'fecha_inicio', 'fecha_fin', 'cantidad', 'dias_arriendo', 'subtotal']
+        model = Prestamo
+        fields = '__all__'
 
-class CarroArriendoSerializer(serializers.ModelSerializer):
-    items = ItemCarroSerializer(many=True, read_only=True)
+    def validate(self, data):
+        # Validaciones al crear un nuevo préstamo (Entrega de herramienta)
+        if self.instance is None:
+            herramienta = data.get('herramienta')
+            contratista = data.get('contratista')
+
+            # Verificar y actualizar morosidad en tiempo real
+            if contratista.verificar_morosidad():
+                raise serializers.ValidationError(
+                    f"ALERTA DE MOROSIDAD: El contratista '{contratista.nombre_empresa}' está BLOQUEADO por tener préstamos vencidos o estado moroso."
+                )
+
+            if herramienta.estado != 'DISPONIBLE':
+                raise serializers.ValidationError(
+                    f"La herramienta '{herramienta.nombre}' no se puede entregar porque su estado actual es: {herramienta.get_estado_display()}."
+                )
+        return data
+
+
+class MantenimientoSerializer(serializers.ModelSerializer):
+    herramienta_nombre = serializers.CharField(source='herramienta.nombre', read_only=True)
+    herramienta_codigo = serializers.CharField(source='herramienta.codigo_interno', read_only=True)
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
 
     class Meta:
-        model = CarroArriendo
-        fields = ['id', 'usuario', 'creado_en', 'items']
-
-# 3. SERIALIZADORES DEL CONTRATO (CHECKOUT)
-class DetalleContratoSerializer(serializers.ModelSerializer):
-    maquinaria_detalle = MaquinariaSerializer(source='maquinaria', read_only=True)
-
-    class Meta:
-        model = DetalleContrato
-        fields = ['id', 'maquinaria', 'maquinaria_detalle', 'fecha_inicio', 'fecha_fin', 'precio_congelado']
-
-class ContratoSerializer(serializers.ModelSerializer):
-    detalles = DetalleContratoSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Contrato
-        fields = ['id', 'usuario', 'estado', 'fecha_creacion', 'total_pagar', 'detalles']
-
-# 4. SERIALIZADOR CUSTOM PARA EL TOKEN JWT (Inyectar Roles)
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-
-        # Inyectamos los claims personalizados exigidos por la pauta
-        token['username'] = user.username
-        token['email'] = user.email
-        
-        # Validamos el rol basándonos en si el usuario es parte del Staff (Ejecutivo) o no (Empresa Constructora)
-        if user.is_staff:
-            token['rol'] = 'Ejecutivo de Arriendos'
-        else:
-            token['rol'] = 'Empresa Constructora'
-
-        return token
-
+        model = Mantenimiento
+        fields = '__all__'

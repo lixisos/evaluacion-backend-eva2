@@ -1,55 +1,29 @@
-{% extends 'base.html' %}
-
-{% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-4">
-        <div class="card shadow border-primary">
-            <div class="card-body">
-                <h3 class="text-center text-primary mb-4">Iniciar Sesión</h3>
-                
-                <!-- El ID "login-form" es vital para que JS lo detecte -->
-                <form id="login-form">
-                    {% csrf_token %}
-                    <input type="text" id="username" class="form-control mb-3" placeholder="Nombre de usuario" required>
-                    <input type="password" id="password" class="form-control mb-3" placeholder="Contraseña" required>
-                    <button type="submit" class="btn btn-primary w-100 fw-bold">Entrar</button>
-                </form>
-                
-                <div class="text-center mt-4">
-                    <p class="mb-0 text-muted">¿No tienes cuenta?</p>
-                    <a href="/registro/" class="text-decoration-none fw-bold">Regístrate aquí</a>
-                </div>
-
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Acceso Operadores - BuildCorp</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark d-flex align-items-center justify-content-center" style="height: 100vh;">
+    <div class="card shadow p-4" style="width: 380px;">
+        <h4 class="text-center fw-bold mb-3">🏗️ BuildCorp Login</h4>
+        {% if error %}
+            <div class="alert alert-danger py-2 small">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/login/">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Usuario</label>
+                <input type="text" name="username" class="form-control" required>
             </div>
-        </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Contraseña</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-warning w-100 fw-bold">Ingresar al Sistema</button>
+            <a href="/" class="btn btn-link w-100 mt-2 btn-sm text-secondary">Volver al Panel Principal</a>
+        </form>
     </div>
-</div>
-
-<script>
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-        // Esta línea es la magia: evita que la url cambie a /login/?csrf...
-        e.preventDefault(); 
-        
-        const user = document.getElementById('username').value;
-        const pass = document.getElementById('password').value;
-
-        try {
-            const res = await fetch('/api/token/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ username: user, password: pass })
-            });
-            
-            if(res.ok){
-                const data = await res.json();
-                localStorage.setItem('access_token', data.access); // Guardamos el pase VIP
-                window.location.href = '/'; // Redirigimos al catálogo
-            } else {
-                alert('Credenciales incorrectas. Verifica tu usuario y contraseña.');
-            }
-        } catch (error) {
-            console.error('Error de conexión:', error);
-        }
-    });
-</script>
-{% endblock %}
+</body>
+</html>

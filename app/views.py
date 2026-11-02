@@ -1,183 +1,166 @@
-from django.shortcuts import render
-from rest_framework import viewsets, status, permissions
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenObtainPairView
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from django.utils import timezone
 from django.db import transaction
-from django_filters.rest_framework import DjangoFilterBackend
-from .models import Maquinaria, CarroArriendo, ItemCarro, Contrato, DetalleContrato
-from .serializers import (MaquinariaSerializer, CarroArriendoSerializer, ItemCarroSerializer, ContratoSerializer, CustomTokenObtainPairSerializer)
-from django.contrib.auth.models import User
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 
-# AUTENTICACIÓN (INYECCIÓN DE ROLES)
-class CustomTokenObtainPairView(TokenObtainPairView):
-    # Usa nuestro serializador personalizado para incluir "Empresa Constructora" o "Ejecutivo" en el Token
-    serializer_class = CustomTokenObtainPairSerializer
+from .models import Herramienta, Contratista, Prestamo, Mantenimiento
+from .serializers import (
+    HerramientaSerializer, ContratistaSerializer,
+    PrestamoSerializer, MantenimientoSerializer
+)
 
-# CATALOGO DE MAQUINARIA (CON FILTROS)
-class MaquinariaViewSet(viewsets.ModelViewSet):
-    queryset = Maquinaria.objects.all()
-    serializer_class = MaquinariaSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['categoria'] # Filtro exigido por la pauta
-    
-    def get_permissions(self):
-        # Cualquiera puede leer el catálogo, pero solo los administradores (Ejecutivos) pueden modificarlo
-        if self.action in ['list', 'retrieve']:
-            return [permissions.AllowAny()]
-        return [permissions.IsAdminUser()]
-    
-# GESTIÓN DEL CARRO PERSISTENTE
-class MiCarroView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+# === VISTAS HTML Y SESIONES DE USUARIO ===
 
-    def get(self, request):
-        # Busca el carro del usuario, si no existe, lo crea. (Cumple relación 1 a 1 y persistencia)
-        carro, _ = CarroArriendo.objects.get_or_create(usuario=request.user)
-        serializer = CarroArriendoSerializer(carro)
-        return Response(serializer.data)
-
-class ItemCarroViewSet(viewsets.ModelViewSet):
-    serializer_class = ItemCarroSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        # Un usuario solo puede ver los ítems de SU propio carro
-        return ItemCarro.objects.filter(carro__usuario=self.request.user)
-
-    def perform_create(self, serializer):
-        carro, _ = CarroArriendo.objects.get_or_create(usuario=self.request.user)
-        serializer.save(carro=carro)
-        
-# CHECKOUT (GENERACION DE LA ORDEN)
-class CheckoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request):
-        carro = getattr(request.user, 'carro', None)
-        if not carro or not carro.items.exists():
-            return Response({"error": "El carro está vacío"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # transaction.atomic() bloquea la base de datos para que no haya errores si dos personas compran a la vez
-        with transaction.atomic():
-            total = sum(item.subtotal for item in carro.items.all())
-            contrato = Contrato.objects.create(usuario=request.user, total_pagar=total)
-            
-            for item in carro.items.all():
-                if item.maquinaria.stock_disponible < item.cantidad:
-                     return Response({"error": f"No hay suficiente stock para la máquina {item.maquinaria.nombre}. Stock actual: {item.maquinaria.stock_disponible}"}, status=status.HTTP_400_BAD_REQUEST)
-
-                DetalleContrato.objects.create(
-                    contrato=contrato,
-                    maquinaria=item.maquinaria,
-                    fecha_inicio=item.fecha_inicio,
-                    fecha_fin=item.fecha_fin,
-                    cantidad=item.cantidad, # Guardamos la cantidad en el contrato
-                    precio_congelado=item.subtotal
-                )
-            # Limpiamos el carro tras generar el contrato exitosamente
-            carro.items.all().delete()
-
-        serializer = ContratoSerializer(contrato)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-#  CONTRATOS Y LÓGICA TRANSACCIONAL DE STOCK
-class ContratoViewSet(viewsets.ModelViewSet):
-    serializer_class = ContratoSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        if self.request.user.is_staff: 
-            return Contrato.objects.all()
-        return Contrato.objects.filter(usuario=self.request.user)
-
-    # NUEVO: Ruta personalizada para procesar el pago directamente aquí
-    @action(detail=False, methods=['post'], url_path='checkout')
-    def procesar_checkout(self, request):
-        carro = getattr(request.user, 'carro', None)
-        if not carro or not carro.items.exists():
-            return Response({"error": "El carro está vacío"}, status=status.HTTP_400_BAD_REQUEST)
-
-        with transaction.atomic():
-            # Sumar el subtotal de cada ítem (que ya viene multiplicado por la cantidad en el serializer)
-            total = sum(item.subtotal for item in carro.items.all())
-            contrato = Contrato.objects.create(usuario=request.user, total_pagar=total)
-
-            for item in carro.items.all():
-                if item.maquinaria.stock_disponible < item.cantidad:
-                     return Response({"error": f"No hay stock suficiente para {item.maquinaria.nombre}."}, status=status.HTTP_400_BAD_REQUEST)
-
-                DetalleContrato.objects.create(
-                    contrato=contrato,
-                    maquinaria=item.maquinaria,
-                    fecha_inicio=item.fecha_inicio,
-                    fecha_fin=item.fecha_fin,
-                    cantidad=item.cantidad,
-                    precio_congelado=item.subtotal
-                )
-            # Vaciar el carro
-            carro.items.all().delete()
-
-        return Response({"mensaje": "Contrato creado con éxito"}, status=status.HTTP_201_CREATED)
-
-    def partial_update(self, request, *args, **kwargs):
-        contrato = self.get_object()
-        nuevo_estado = request.data.get('estado')
-
-        if not request.user.is_staff:
-            return Response({"error": "Solo un Ejecutivo puede actualizar el estado"}, status=status.HTTP_403_FORBIDDEN)
-
-        with transaction.atomic():
-            if nuevo_estado == 'PAGADO' and contrato.estado == 'PENDIENTE':
-                for detalle in contrato.detalles.all():
-                    maquina = detalle.maquinaria
-                    if maquina.stock_disponible < detalle.cantidad:
-                        return Response({"error": f"Stock insuficiente para {maquina.nombre}"}, status=status.HTTP_400_BAD_REQUEST)
-                    maquina.stock_disponible -= detalle.cantidad
-                    maquina.save()
-            
-            elif nuevo_estado in ['COMPLETADO', 'CANCELADO'] and contrato.estado == 'PAGADO':
-                for detalle in contrato.detalles.all():
-                    maquina = detalle.maquinaria
-                    maquina.stock_disponible += detalle.cantidad
-                    maquina.save()
-            
-            return super().partial_update(request, *args, **kwargs)
-
-# VISTAS FRONTEND (ENMASCARAMIENTO)
-def login_view(request):
-    return render(request, 'login.html')
-
-def catalogo_view(request):
+def index_view(request):
+    """Renderiza el panel principal de BuildCorp."""
     return render(request, 'catalogo.html')
 
-def carro_view(request):
-    return render(request, 'carro.html')
+def login_view(request):
+    """Manejo de sesión para operadores y administradores."""
+    if request.method == 'POST':
+        u = request.POST.get('username')
+        p = request.POST.get('password')
+        user = authenticate(request, username=u, password=p)
+        if user is not None:
+            login(request, user)
+            return redirect('home')
+        return render(request, 'login.html', {'error': 'Credenciales inválidas'})
+    return render(request, 'login.html')
 
-def dashboard_view(request):
-    return render(request, 'dashboard.html')
+def logout_view(request):
+    logout(request)
+    return redirect('home')
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def registro_cliente(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
-    
-    if not username or not password:
-        return Response({"error": "Faltan datos"}, status=status.HTTP_400_BAD_REQUEST)
-        
-    if User.objects.filter(username=username).exists():
-        return Response({"error": "El usuario ya existe"}, status=status.HTTP_400_BAD_REQUEST)
-        
-    # Crear usuario normal (is_staff=False, por lo tanto es Cliente)
-    user = User.objects.create_user(username=username, password=password)
-    return Response({"mensaje": "Usuario creado"}, status=status.HTTP_201_CREATED)
+# === ENDPOINTS API REST (DRF) & REGLAS DE NEGOCIO ===
 
-# Vista para renderizar el HTML del registro
-def registro_view(request):
-    return render(request, 'registro.html')
+class HerramientaViewSet(viewsets.ModelViewSet):
+    queryset = Herramienta.objects.all().order_by('codigo_interno')
+    serializer_class = HerramientaSerializer
+    permission_classes = [AllowAny]
+    filterset_fields = ['estado', 'categoria', 'bodega_obra']
+
+
+class ContratistaViewSet(viewsets.ModelViewSet):
+    queryset = Contratista.objects.all().order_by('nombre_empresa')
+    serializer_class = ContratistaSerializer
+    permission_classes = [AllowAny]
+
+    @action(detail=True, methods=['post'])
+    def alternar_bloqueo(self, request, pk=None):
+        """Permite bloquear o desbloquear manualmente a un contratista."""
+        contratista = self.get_object()
+        contratista.bloqueado_por_morosidad = not contratista.bloqueado_por_morosidad
+        contratista.save()
+        return Response({
+            'id': contratista.id,
+            'bloqueado_por_morosidad': contratista.bloqueado_por_morosidad
+        })
+
+
+class PrestamoViewSet(viewsets.ModelViewSet):
+    queryset = Prestamo.objects.all().order_by('-id')
+    serializer_class = PrestamoSerializer
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        """Al entregar una herramienta, cambia su estado a EN_USO y actualiza su ubicación."""
+        prestamo = serializer.save()
+        herramienta = prestamo.herramienta
+        herramienta.estado = 'EN_USO'
+        herramienta.bodega_obra = prestamo.obra_destino
+        herramienta.save()
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def registrar_devolucion(self, request, pk=None):
+        """Registra la devolución con firma digital, suma horas de uso y evalúa mantenimiento."""
+        prestamo = self.get_object()
+        if prestamo.estado == 'DEVUELTO':
+            return Response({'error': 'Este préstamo ya fue devuelto anteriormente.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        firma_devolucion = request.data.get('firma_digital_devolucion')
+        horas_usadas = int(request.data.get('horas_usadas_en_prestamo', 0))
+        bodega_retorno = request.data.get('bodega_retorno', 'Bodega Central')
+
+        if not firma_devolucion:
+            return Response({'error': 'La firma digital del responsable es obligatoria para devolver.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        prestamo.firma_digital_devolucion = firma_devolucion
+        prestamo.horas_usadas_en_prestamo = horas_usadas
+        prestamo.fecha_devolucion_real = timezone.now().date()
+        prestamo.estado = 'DEVUELTO'
+        prestamo.save()
+
+        # Actualizar trazabilidad y horas de uso de la herramienta
+        herramienta = prestamo.herramienta
+        herramienta.horas_uso_acumuladas += horas_usadas
+        herramienta.bodega_obra = bodega_retorno
+
+        # Regla 3: Si superó las horas límite o fecha, pasa automáticamente a MANTENIMIENTO
+        if herramienta.requiere_mantenimiento():
+            herramienta.estado = 'MANTENIMIENTO'
+            Mantenimiento.objects.create(
+                herramienta=herramienta,
+                tipo='PREVENTIVO',
+                tecnico_responsable='Taller Central BuildCorp',
+                descripcion_trabajo=f'Mantenimiento preventivo automático por alcanzar {herramienta.horas_uso_acumuladas} hrs de uso.',
+                estado='PROGRAMADO'
+            )
+        else:
+            herramienta.estado = 'DISPONIBLE'
+        herramienta.save()
+
+        return Response({'mensaje': 'Devolución registrada con éxito.', 'nuevo_estado_herramienta': herramienta.estado})
+
+    @action(detail=False, methods=['post'])
+    def verificar_alertas_morosidad(self, request):
+        """Revisa todos los préstamos vencidos, los marca como ATRASADO y bloquea al contratista."""
+        hoy = timezone.now().date()
+        vencidos = Prestamo.objects.filter(estado='ACTIVO', fecha_devolucion_esperada__lt=hoy)
+        bloqueados = 0
+        for p in vencidos:
+            p.estado = 'ATRASADO'
+            p.save()
+            if not p.contratista.bloqueado_por_morosidad:
+                p.contratista.bloqueado_por_morosidad = True
+                p.contratista.save()
+                bloqueados += 1
+        return Response({
+            'prestamos_en_mora': Prestamo.objects.filter(estado='ATRASADO').count(),
+            'nuevos_contratistas_bloqueados': bloqueados
+        })
+
+
+class MantenimientoViewSet(viewsets.ModelViewSet):
+    queryset = Mantenimiento.objects.all().order_by('-id')
+    serializer_class = MantenimientoSerializer
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        """Al registrar un mantenimiento, la herramienta pasa a estado MANTENIMIENTO."""
+        mant = serializer.save()
+        if mant.estado != 'COMPLETADO':
+            h = mant.herramienta
+            h.estado = 'MANTENIMIENTO'
+            h.save()
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def completar(self, request, pk=None):
+        """Finaliza el mantenimiento, reinicia contador o libera la herramienta a DISPONIBLE."""
+        mant = self.get_object()
+        mant.estado = 'COMPLETADO'
+        mant.save()
+
+        h = mant.herramienta
+        h.estado = 'DISPONIBLE'
+        h.limite_horas_mantenimiento = h.horas_uso_acumuladas + 100
+        h.save()
+        return Response({'mensaje': 'Mantenimiento completado. Herramienta nuevamente DISPONIBLE.'})
