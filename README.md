@@ -6,9 +6,9 @@
 * **Proyecto Asignado:** Proyecto 4 (BuildCorp)
 
 ## 🌐 Acceso Despliegue en AWS EC2
-* **Aplicación Web Pública:** `http://<REEMPLAZAR_CON_TU_IP_PUBLICA_EC2>:8000/`
-* **Panel Administrativo (Django Admin):** `http://<REEMPLAZAR_CON_TU_IP_PUBLICA_EC2>:8000/admin/`
-* **Documentación OpenAPI (Swagger):** `http://<REEMPLAZAR_CON_TU_IP_PUBLICA_EC2>:8000/api/docs/`
+* **Aplicación Web Pública:** http://34.229.173.105:8000/
+* **Panel Administrativo (Django Admin):** http://34.229.173.105:8000/admin/
+* **Documentación OpenAPI (Swagger):** http://34.229.173.105:8000/api/docs/
 
 ## 🚀 Funcionalidades Implementadas
 1. **Catálogo y Trazabilidad de Activos:** Control de herramientas por código, categoría, ubicación en bodega/obra y estados (`DISPONIBLE`, `EN_USO`, `MANTENIMIENTO`, `DADO_DE_BAJA`).
